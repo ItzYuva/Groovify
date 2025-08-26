@@ -5,11 +5,11 @@ Welcome to **Groovify** — your personal DJ who doesn’t charge per hour, does
 
 ##  Features
 
-**AI Music Generation with ACE-Step** – neural music composition powered by deep learning.  
-**LLM-Powered Lyric & Prompt Generation with Qwen2-7B** – create lyrics or prompts on the fly.  
-**Multiple Generation Modes** – generate music from descriptions, custom lyrics, or described lyrics.  
-**Serverless GPU Processing with Modal** – lightning-fast generation without managing servers.  
-**Queue System with Inngest** – smooth background handling of generation tasks.  
-**User Authentication with BetterAuth** – secure login & personalized sessions.  
-**Personal Track Dashboard** – manage, play, and publish your songs.  
-**Python & FastAPI Backend** – efficient backend powering music generation logic.
+- **AI Music Generation with ACE-Step** – neural music composition powered by deep learning.  
+- **LLM-Powered Lyric & Prompt Generation with Qwen2-7B** – create lyrics or prompts on the fly.  
+- **Multiple Generation Modes** – generate music from descriptions, custom lyrics, or described lyrics.  
+- **Serverless GPU Processing with Modal** – lightning-fast generation without managing servers.  
+- **Queue System with Inngest** – smooth background handling of generation tasks.  
+- **User Authentication with BetterAuth** – secure login & personalized sessions.  
+- **Personal Track Dashboard** – manage, play, and publish your songs.  
+- **Python & FastAPI Backend** – efficient backend powering music generation logic.
