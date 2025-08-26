@@ -14,6 +14,6 @@ Welcome to **Groovify** — your personal DJ who doesn’t charge per hour, does
 - **Personal Track Dashboard** – manage, play, and publish your songs.  
 - **Python & FastAPI Backend** – efficient backend powering music generation logic.
 
-Here’s the **Music generation model architecture** :  
+## **Music generation model architecture** :  
 
-![ACE-Step Architecture](Untitled-2025-06-24-1252.excalidraw.png)
+![ACE-Step Architecture](Untitled-2025-06-24-1252.png)
