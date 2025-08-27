@@ -135,6 +135,14 @@ class MusicGenServer:
         # Run LLM inference and return that
         return self.prompt_qwen(full_prompt)
     
+    def generate_categories(self, description: str) -> List[str]:
+        prompt = f"Based on the following music description, list 3-5 relevant genres or categories as a comma-separated list. For example: Pop, Electronic, Sad, 80s. Description: '{description}'"
+
+        response_text = self.prompt_qwen(prompt)
+        categories = [cat.strip()
+                      for cat in response_text.split(",") if cat.strip()]
+        return categories
+    
     def generate_and_upload_to_s3(
             self,
             prompt: str,
@@ -183,7 +191,14 @@ class MusicGenServer:
         s3_client.upload_file(image_output_path, bucket_name, image_s3_key)
         os.remove(image_output_path)
 
-        
+        # Category generation: "hip-hop", "rock"
+        categories = self.generate_categories(description_for_categorization)
+
+        return GenerateMusicResponseS3(
+            s3_key=audio_s3_key,
+            cover_image_s3_key=image_s3_key,
+            categories=categories
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def generate(self) -> GenerateMusicResponse:
