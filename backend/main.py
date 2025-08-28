@@ -1,11 +1,12 @@
+import base64
 from typing import List
 import uuid
 import modal
 import os
-import base64
+import boto3
+
 from pydantic import BaseModel
 import requests
-import boto3
 
 from prompts import LYRICS_GENERATOR_PROMPT, PROMPT_GENERATOR_PROMPT
 
@@ -15,17 +16,17 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install_from_requirements("requirements.txt")
-    .run_commands(["git clone https://github.com/ace-step/ACE-Step.git /tmp/ACE-STEP", "cd /tmp/ACE-STEP && pip install ."])
+    .run_commands(["git clone https://github.com/ace-step/ACE-Step.git /tmp/ACE-Step", "cd /tmp/ACE-Step && pip install ."])
     .env({"HF_HOME": "/.cache/huggingface"})
     .add_local_python_source("prompts")
 )
 
 model_volume = modal.Volume.from_name(
-    "ace-step-models", create_if_missing=True
-)
-hf_volume = modal.Volume.from_name("gwen-hf-cache", create_if_missing=True)
+    "ace-step-models", create_if_missing=True)
+hf_volume = modal.Volume.from_name("qwen-hf-cache", create_if_missing=True)
 
 music_gen_secrets = modal.Secret.from_name("music-gen-secret")
+
 
 class AudioGenerationBase(BaseModel):
     audio_duration: float = 180.0
@@ -33,6 +34,7 @@ class AudioGenerationBase(BaseModel):
     guidance_scale: float = 15.0
     infer_step: int = 60
     instrumental: bool = False
+
 
 class GenerateFromDescriptionRequest(AudioGenerationBase):
     full_described_song: str
@@ -47,13 +49,16 @@ class GenerateWithDescribedLyricsRequest(AudioGenerationBase):
     prompt: str
     described_lyrics: str
 
+
 class GenerateMusicResponseS3(BaseModel):
     s3_key: str
     cover_image_s3_key: str
     categories: List[str]
 
+
 class GenerateMusicResponse(BaseModel):
     audio_data: str
+
 
 @app.cls(
     image=image,
@@ -62,7 +67,6 @@ class GenerateMusicResponse(BaseModel):
     secrets=[music_gen_secrets],
     scaledown_window=15
 )
-
 class MusicGenServer:
     @modal.enter()
     def load_model(self):
@@ -71,7 +75,7 @@ class MusicGenServer:
         from diffusers import AutoPipelineForText2Image
         import torch
 
-        # music generation model
+        # Music Generation Model
         self.music_model = ACEStepPipeline(
             checkpoint_dir="/models",
             dtype="bfloat16",
@@ -127,14 +131,14 @@ class MusicGenServer:
 
         # Run LLM inference and return that
         return self.prompt_qwen(full_prompt)
-    
+
     def generate_lyrics(self, description: str):
         # Insert description into template
         full_prompt = LYRICS_GENERATOR_PROMPT.format(description=description)
 
         # Run LLM inference and return that
         return self.prompt_qwen(full_prompt)
-    
+
     def generate_categories(self, description: str) -> List[str]:
         prompt = f"Based on the following music description, list 3-5 relevant genres or categories as a comma-separated list. For example: Pop, Electronic, Sad, 80s. Description: '{description}'"
 
@@ -142,7 +146,7 @@ class MusicGenServer:
         categories = [cat.strip()
                       for cat in response_text.split(",") if cat.strip()]
         return categories
-    
+
     def generate_and_upload_to_s3(
             self,
             prompt: str,
@@ -200,7 +204,7 @@ class MusicGenServer:
             categories=categories
         )
 
-    @modal.fastapi_endpoint(method="POST")
+    @modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
     def generate(self) -> GenerateMusicResponse:
         output_dir = "/tmp/outputs"
         os.makedirs(output_dir, exist_ok=True)
@@ -218,7 +222,7 @@ class MusicGenServer:
         with open(output_path, "rb") as f:
             audio_bytes = f.read()
 
-        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         os.remove(output_path)
 
@@ -248,19 +252,34 @@ class MusicGenServer:
         if not request.instrumental:
             lyrics = self.generate_lyrics(request.described_lyrics)
         return self.generate_and_upload_to_s3(prompt=request.prompt, lyrics=lyrics,
-                                              description_for_categorization=request.prompt, **request.model_dump(exclude={"described_lyrics", "prompt"}))    
+                                              description_for_categorization=request.prompt, **request.model_dump(exclude={"described_lyrics", "prompt"}))
 
 
 @app.local_entrypoint()
 def main():
     server = MusicGenServer()
-    endpoint_url = server.generate.get_web_url()
+    endpoint_url = server.generate_with_described_lyrics.get_web_url()
 
-    response = requests.post(endpoint_url)
+    request_data = GenerateWithDescribedLyricsRequest(
+        prompt="rave, funk, 140BPM, disco",
+        described_lyrics="lyrics about water bottles",
+        guidance_scale=15
+    )
+
+    payload = request_data.model_dump()
+
+    headers = {
+        "Authorization": f"Bearer {server.auth_token}" # ERROR HERE
+    }
+
+    response = requests.post(endpoint_url, json=payload, headers=headers)
     response.raise_for_status()
-    result = GenerateMusicResponse(**response.json())
+    result = GenerateMusicResponseS3(**response.json())
 
-    audio_bytes = base64.b64decode(result.audio_data)
-    output_filename = "generated.wav"
-    with open(output_filename, "wb") as f:
-        f.write(audio_bytes)
+    print(
+        f"Success: {result.s3_key} {result.cover_image_s3_key} {result.categories}")
+
+    # audio_bytes = base64.b64decode(result.audio_data)
+    # output_filename = "generated.wav"
+    # with open(output_filename, "wb") as f:
+    #     f.write(audio_bytes)
